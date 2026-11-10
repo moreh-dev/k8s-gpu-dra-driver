@@ -53,6 +53,18 @@ func (d *AllocatableDevice) CanonicalName() string {
 	panic(fmt.Sprintf("unexpected device type: %s", d.Type()))
 }
 
+// placement returns the NUMA node, card index and render index that order the
+// device in the ResourceSlice
+func (d *AllocatableDevice) placement() (numaNode, card, render int) {
+	switch d.Type() {
+	case AmdGpuDeviceType:
+		return d.AmdGpu.NumaNode, d.AmdGpu.cardIndex, d.AmdGpu.renderIndex
+	case AmdPartitionDeviceType:
+		return d.AmdPartition.NumaNode, d.AmdPartition.cardIndex, d.AmdPartition.renderIndex
+	}
+	panic(fmt.Sprintf("unexpected device type: %s", d.Type()))
+}
+
 // GetDevice returns the DRA Device representation for Kubernetes
 func (d *AllocatableDevice) GetDevice() resourceapi.Device {
 	switch d.Type() {

@@ -117,19 +117,23 @@ func NewDriver(ctx context.Context, config *Config) (*driver, error) {
 	return driver, nil
 }
 
-// resourceSliceDevices returns the allocatable devices sorted by name. Go map
-// iteration order is not specified, so without sorting the published
-// ResourceSlice would change on every restart. The order is also the first-fit
-// allocation priority the scheduler applies, so keeping it deterministic
-// matters beyond avoiding churn.
+// resourceSliceDevices returns the allocatable devices grouped by NUMA node
+// and, within a node, ordered by card index. The scheduler takes the first
+// devices in this order that satisfy a claim, so grouping by NUMA node fills
+// one node before the next and leaves whole NUMA nodes free for claims that
+// require all their devices on one. Go map iteration order is not specified,
+// so a fixed order also keeps the published ResourceSlice from changing on
+// every restart.
 func resourceSliceDevices(allocatable AllocatableDevices) []resourceapi.Device {
-	devices := make([]resourceapi.Device, 0, len(allocatable))
-	for device := range maps.Values(allocatable) {
+	sorted := slices.SortedFunc(maps.Values(allocatable), func(a, b *AllocatableDevice) int {
+		aNuma, aCard, aRender := a.placement()
+		bNuma, bCard, bRender := b.placement()
+		return cmp.Or(cmp.Compare(aNuma, bNuma), cmp.Compare(aCard, bCard), cmp.Compare(aRender, bRender))
+	})
+	devices := make([]resourceapi.Device, 0, len(sorted))
+	for _, device := range sorted {
 		devices = append(devices, device.GetDevice())
 	}
-	slices.SortFunc(devices, func(a, b resourceapi.Device) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
 	return devices
 }
 
